@@ -1,0 +1,198 @@
+---
+title: "Compare NIR spectrometry and wet chemistry forage analysis methods between paired forage samples collected in grazing pastures"
+author: "Ira L. Parsons^1,†^, Brandi B. Karisch^2^, Stephen L. Webb^3^, Amanda E. Stone^2^, Mike Proctor^3^, Ryan Hicks^3^, Garrett M. Street^1^"
+
+output:
+   officedown::rdocx_document:
+     reference_docx: TAS-styles-ref-document.docx
+     fig_caption: TRUE
+bibliography: ./Forage.bib
+link-citations: yes
+csl: ./journal-of-animal-science.csl
+---
+^1^ Quantitative Ecology and Spatial Technologies Laboratory, Department of Wildlife, Fisheries, and Aquaculture, Mississippi State University, Mississippi, USA, 39762  
+^2^ Department of Animal and Dairy Sciences, Mississippi State, Mississippi, 39762  
+^3^ Noble Research Institute, 2510 Sam Noble Parkway, Ardmore, OK, USA, 73401   
+^†^ Corresponding author: ilp28@msstate.edu
+\newpage
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+remove(list = ls())
+options(scipen = 999) # turns off scientific notation
+
+customtab_defaults <- function(){
+set_flextable_defaults(font.family = "Calibri",
+font.size = 10,
+border.color = "black")
+}
+
+my_table = function(df, footer){
+  flextable(df) %>% 
+  #add_header_lines(header) %>%
+  add_footer_lines(footer) %>%
+  # bold(i = 1, part = "header") %>%
+  hline_top(part = "header", border = fp_border(color = "black", width = 1,style = "solid")) %>%
+  hline(i = 1, part = "header",border = fp_border(color = "black", width = 0.25, style = "solid")) %>%
+  hline_top(part = "body",border = fp_border(color = "black", width = 0.25, style = "solid")) %>%
+  hline_bottom(part = "body", border = fp_border(color = "black", width = 0.25,  style = "solid")) %>%
+  hline_bottom(part = "footer",border = fp_border(color = "black",width = 0.25,  style = "solid")) %>%
+  #border_inner_h(part = "body",  border = fp_border(color = "black",  width = 0.25,  style = "dotted")) %>%
+  autofit(part = "body") %>%
+  #bg(part = "body", bg = "#f5f5f5") %>%
+  align(part = "all", align = "center") %>%
+  align(j = 1, part = "all", align = "left")
+}
+```
+
+``` {r libraries, include = FALSE}
+# Rmardown
+library(rmarkdown)
+library(officedown)
+library(officer)
+# Data manipulation
+library(lubridate)
+library(tidyverse)
+# Statistics
+library(betareg)
+library(onewaytests)
+library(car)
+# Plotting
+library(ggplot2)
+library(formattable)
+library(flextable)
+```
+# Abstract
+
+# Introduction
+Grazing animal performance and health is dependent upon plain of nutrition, requiring active pasture and nutrition management by livestock producers. Nutrition is often the first limiting resource in grazing environment, and have a direct impact on milk production, growth, and reproductive traits, making them nutritionally critical for creating economically productive operations[@corson_nirs_1999]. Near Infrared Spectromentry has long been utilized as a economic method for predicting forage nutritional quality, and is understood to provide reliable results relative to traditional methods using wet chemistry.
+
+## Objectives 
+1. Compare the same parameters obtained from both testing methods [@stuth_direct_2003]
+2. Compare the means of the paired samples for all variables
+  a. Use a paired T-test by employing the t.test command in R, with the specification for paired samples.
+  b. Visually observed the mean and infrared differences by creating box and whisker plots, and scatter plots
+3. Compare the standard deviations for the samples.
+  a. Compare the variation in the populations between the two sampling methods using the F statistic, testing using the Brown Forsyth test statistic obtained from the oneway Test package in R.
+
+# Methods
+Forage samples were collected from 49 sampling stations evenly distrubuted across the pasture in a grid design, with 9 repeated sampling events occuring on a 35 day interval. A handheld global positioning system (*GPS*) was utilized to navigate to the sampling station. After the point was located, a 1/4-m square quadrant was tossed over the left shoulder to locate an unbiased forage sample at the sampling station. Two identical samples were cut and deposited in forage bags, one for NIR analysis (*NIR*) and Wet Chemical analysis (*WET*) to determine forage quality and measure the predictive accuracy of NIR forage analysis methods. 
+
+Following analysis, data were saved in a .csv file and imported into Program R [@r_core_team_r_2021]. Normality of results was assessed visually using a histogram and the shapiro wilkes test. Next A T-Test was used to asses the differences between WET and NIR forage analysis methods, and the differences and siginicance. A linear mixed model was fit in using the *lmer* function in the *lme4* package by specifying NIR variable as the dependent variable and specifying WET as fixed, with Sampling location nested withing sampling period as random affects.
+
+```{r include = TRUE}
+forage <- read.csv("/Volumes/Extreme SSD/PhD/MSU_Grazingecology/Rawdata/Forage/Forage.csv", header = TRUE)
+```
+
+### Get important data
+```{r}
+wet.dat <- filter(forage, WetID != "NA")
+length(colnames(wet.dat)) # How many columns?
+length(unique(wet.dat$SampleID)) # see how many sampling stations are in the dataset
+```
+Get important nutritional data, (CP, NDF, ADF, TDN, RFV, and DM percentage). Then check for complete observations.
+``` {r}
+wet.dat <- dplyr::select(wet.dat,-c("NIR.Ca.PDB","NIR.P.PDB","NIR.DM.PAR","NIR.K.PDB","NIR.Mg.PDB","NIR.IVTDMD","NIR.Fat.PDB", "NIR.Ash.PDB","NIR.dNDF48.PDB",  "NIR.Starch.PDB","NIR.Fructan.PDB","NIR.WSC.PDB","NIR.CP.PAR"))
+wet.dat$complete <- complete.cases(wet.dat) # Check for all columns with all the variables
+wet.dat <- filter(wet.dat, complete == TRUE)
+wet.dat <- wet.dat[,1:22] # Remove complete Cases Column
+wet.dat$NIR.DMprc <- 100-((wet.dat$NIR.Wetwt.g - wet.dat$NIR.Drywt.g)/wet.dat$NIR.Wetwt.g)*100
+wet.dat$Wet.DMprc <- 100 -((wet.dat$Wet.Wetwt.g - wet.dat$Wet.Drywt.g)/wet.dat$Wet.Wetwt.g)*100
+
+head(wet.dat)
+str(wet.dat)
+```
+
+### Data Analysis
+A series of histograms was utilized to visually inspect the range and distribution of the data. The majority of the data is structured in a beta distribution, with proportions ranging from zero to 1. Summary statistics indicate that the forage is consistent with forage quality expected for the region and season (Beef NRC, 2000; NASEM, 2016, and Beef Magazine Feed Composition Tables).
+
+#### Summary tables and histograms
+```{r}
+par(mfrow=c(2,3))
+for (i in 6:24) {
+  hist(wet.dat[,i], main = colnames(wet.dat)[i])
+}
+```
+
+#### Correlation Tables 
+
+```{r include = TRUE}
+cor.dat <- data.frame(cor(wet.dat[,6:24], use = 'complete.obs',method = 'pearson'))
+formattable(print(cor.dat[9:19,1:7]))
+```
+At first glance, it appears that there is about a 75% correlation of association between the NIR sample and the Wet Sample. However, this is not taking into acount any variation that would occur due to time and space variation. The next step is to do a similar test in a pairwise comparison
+
+```{r include=TRUE}
+par.cor <- data.frame(cor(wet.dat[,6:24],use = "pairwise.complete.obs",method = "pearson"))
+formattable(par.cor[c(3:7,19),c(12,14:19)])
+```
+Lets look and see if a T test changes anything.
+
+## Paired T-Test
+``` {r}
+### Look at differences using pairwise T-test
+t.test(wet.dat$NIR.Wetwt.g,wet.dat$Wet.Wetwt.g, paired = T)
+t.test(wet.dat$NIR.Drywt.g,wet.dat$Wet.Drywt.g, paired = T)
+t.test(wet.dat$NIR.DMprc,wet.dat$Wet.DMprc, paired = T)
+t.test(wet.dat$NIR.CP.PDB,wet.dat$Wet.CP.PDP, paired = T)
+t.test(wet.dat$NIR.ADF.PDB,wet.dat$Wet.ADF.PDB, paired = T)
+t.test(wet.dat$NIR.NDF.PDB, wet.dat$Wet.NDF.PDB, paired = T)
+t.test(wet.dat$NIR.RFV,wet.dat$Wet.RFV, paired = T)
+t.test(wet.dat$NIR.TDN.PDB, wet.dat$Wet.TDN.PDB, paired = T)
+```
+
+Acid Detergent Fiber is between -2.85 and -3.9 percentage points lower for the NIR compared to the Wet Chemistry sample. The Relative Feed Value is slightly lower according to the Wet Chemistry sampls, and Total Digestible Nutrients is lower , CI -4.23 - -3.o4, according to the NIR analysis. This indicates that the NIR analysis is underestimating digestible acid detergent fiber and total digestible nutrients in the forage.
+
+```{r}
+par(mfrow=c(2,2))
+boxplot(wet.dat$NIR.Wetwt.g,wet.dat$Wet.Wetwt.g, names = c("NIR","Wet"), main = "Wet Weight")
+boxplot(wet.dat$NIR.Drywt.g, wet.dat$Wet.Drywt.g,names = c("NIR","Wet"), main = "Dry Weight")
+boxplot(wet.dat$NIR.DMprc,wet.dat$Wet.DMprc, names = c("NIR","Wet"),main = "Percent Dry Matter")
+boxplot(wet.dat$NIR.CP.PDB, wet.dat$Wet.CP.PDP, names = c("NIR", "Wet"), main = "Crude Protein")
+boxplot(wet.dat$NIR.ADF.PDB,wet.dat$Wet.ADF.PDB, names = c("NIR","Wet"), main = "Acid Detergent Fiber")
+boxplot(wet.dat$NIR.NDF.PDB, wet.dat$Wet.NDF.PDB,names = c("NIR","Wet"), main = "Neutral Detergent Fiber")
+boxplot(wet.dat$NIR.RFV,wet.dat$Wet.RFV,names = c("NIR","Wet"), main = "Relative Feed Value")
+boxplot(wet.dat$NIR.TDN.PDB,wet.dat$Wet.TDN.PDB,names = c("NIR","Wet"), main = "Total Digestible Nutrients")
+```
+### Further exploration
+Wet chemistry does not always align perfectly with the NIR results. So, it may be that accounting for variation in both space and time may find 1 of potentially 2 options. 1) There are few sampling stations that yielded a poor sample (low quantity or of unequal quality), that are driving the differences. 2) it is a time affect that means at different times of the growing season, the equations do a better job prediction forage quality than others. This could be partially flushed out by considering the weight of the forage sample, and seeing if the weight of the forage is a significant covariate.
+
+```{r}
+par(mfrow=c(2,2))
+plot(wet.dat$NIR.Wetwt.g, wet.dat$Wet.Wetwt.g, xlab = "NIR", ylab = "Wet Chemistry",
+     main = "Sample Wet Weight")
+plot(wet.dat$NIR.Drywt.g,wet.dat$Wet.Drywt.g, xlab = "NIR", ylab = "Wet Chemistry",
+     main = "Sample Dry Weight")
+plot(wet.dat$NIR.DMprc,wet.dat$Wet.DMprc, 
+     xlab = "NIR", ylab = "Wet Chemistry", main = "Percent Dry Matter")
+plot(wet.dat$NIR.CP.PDB, wet.dat$Wet.CP.PDP, main = "Crude Protein",
+     xlab = "NIR", ylab = "Wet Chemistry")
+plot(wet.dat$Wet.ADF.PDB,wet.dat$NIR.ADF.PDB,
+     xlab = "NIR", ylab = "Wet Chemistry", main = "Acid Detergent Fiber")
+plot(wet.dat$NIR.NDF.PDB, wet.dat$Wet.NDF.PDB,
+     xlab = "NIR",ylab = "Wet Chemistry", main = "Neurtral Detergent Fiber")
+plot(wet.dat$NIR.RFV,wet.dat$Wet.RFV,
+     xlab = "NIR",ylab = "Wet", main = "Relative Feed Value")
+plot(wet.dat$NIR.TDN.PDB,wet.dat$Wet.TDN.PDB,
+     xlab = "NIR", ylab = "Wet", main = "Total Digestible Nutrients")
+```
+
+## Brown Forsythe Testing 
+The Brown Forsythe test examines the population variance between the two populations, testing the null (Ho) hypothesis that the sd of one population is equal to the sd of the other population. This is important when comparing to test, such as NIR vs. Wet Chemistry, because we are not only concerned with finding the same population mean, but also having a identical variation in the forage population. This allows us to test both the precision and the accuracy of the forage testing method (Ott and Longnecker, 2016 Cengage Learning. chapt. 7.4).
+
+```{r}
+# Brown Forsyth test (Brown, M.B., Forsythe A.B. 1974a)
+library(onewaytests)
+dat <- pivot_longer(wet.dat, cols = c(6:24)) %>% 
+  separate(col = name, into = c("Test","Cons","Unit"))
+dat$Test <- as.factor(dat$Test)
+
+bf.test(value ~ Test, data = dat[dat$Cons == "Wetwt",], alpha = 0.05, na.rm = TRUE)
+bf.test(value ~ Test, data = dat[dat$Cons == "Drywt",], alpha = 0.05, na.rm = TRUE)
+bf.test(value ~ Test, data = dat[dat$Cons == "CP",], alpha = 0.05, na.rm = TRUE)
+bf.test(value ~ Test, data = dat[dat$Cons == "ADF",], alpha = 0.05, na.rm = TRUE)
+bf.test(value ~ Test, data = dat[dat$Cons == "NDF",], alpha = 0.05, na.rm = TRUE)
+#bf.test(value ~ Test, data = dat[dat$Cons == "RFV",], alpha = 0.05, na.rm = TRUE) # omitted because not run. Still don't know why.
+bf.test(value ~ Test, data = dat[dat$Cons == "TDN",], alpha = 0.05, na.rm = TRUE)
+#bf.test(value ~ Test, data = dat[dat$Cons == "Lignin",], alpha = 0.05, na.rm = TRUE)
+#bf.test(value ~ Test, data = dat[dat$Cons == "DM",], alpha = 0.05, na.rm = TRUE)
+```
